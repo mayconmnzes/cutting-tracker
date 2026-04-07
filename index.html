@@ -2,10 +2,11 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Cutting Tracker PRO - Meta Dinâmica</title>
+    <title>Cutting Tracker PRO - Cardio & Meta Dinâmica</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
-        :root { --primary: #00aa88; --bg: #111; --card: #222; --accent: cyan; --water: #3498db; --prot: #2ecc71; }
+        :root { --primary: #00aa88; --bg: #111; --card: #222; --accent: cyan; --water: #3498db; --prot: #2ecc71; --run: #f1c40f; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: white; margin: 0; padding: 15px; }
         .container { max-width: 1100px; margin: auto; }
         h1 { text-align: center; color: var(--primary); font-size: 1.5rem; text-transform: uppercase; }
@@ -29,6 +30,8 @@
         .card-stat { background: #1a1a1a; padding: 15px; border-radius: 8px; text-align: center; border-bottom: 3px solid var(--primary); }
         .card-stat h3 { margin: 0; font-size: 0.75rem; color: #aaa; }
         .card-stat p { margin: 8px 0 0; font-size: 1.3rem; font-weight: bold; color: var(--accent); }
+        .card-stat.card-run { border-bottom-color: var(--run); }
+        .card-stat.card-loss { border-bottom-color: var(--prot); }
 
         table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #1a1a1a; font-size: 0.85rem; }
         th, td { padding: 12px; border: 1px solid #333; text-align: center; }
@@ -36,6 +39,18 @@
         .status-ok { color: var(--prot); font-weight: bold; }
         .status-warn { color: orange; }
         .hidden { display: none; }
+        .input-inline { background: #333; border: 1px solid #555; color: white; padding: 5px; border-radius: 4px; }
+        .btn-pdf { background: #e74c3c; border: none; width: 100%; margin-top: 15px; font-weight: bold; text-transform: uppercase; }
+
+        /* Estilos específicos para o PDF */
+        #pdf-template { padding: 30px; color: #000; background: #fff; font-family: sans-serif; display: none; }
+        .pdf-header { border-bottom: 4px solid #00aa88; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .pdf-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px; }
+        .pdf-box { border: 1px solid #ddd; padding: 10px; text-align: center; border-radius: 8px; background: #f9f9f9; }
+        .pdf-footer { margin-top: 20px; padding: 15px; background: #e8f5e9; border-left: 5px solid #2ecc71; border-radius: 0 8px 8px 0; }
+        #pdf-template table { color: #000; width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.7rem; }
+        #pdf-template th { background: #eee; color: #000; }
+        #pdf-template td, #pdf-template th { border: 1px solid #ccc; padding: 5px; }
     </style>
 </head>
 <body>
@@ -55,13 +70,17 @@
 
     <div id="report" class="hidden">
         <div class="stats-cards">
+            <div class="card-stat card-loss"><h3>Total Perdido</h3><p id="stat-perda-real">0.0 kg</p></div>
             <div class="card-stat"><h3>Peso Previsto (Dia 30)</h3><p id="stat-peso-30">--</p></div>
             <div class="card-stat"><h3>Média Proteína</h3><p id="stat-avg-prot">0g</p></div>
             <div class="card-stat"><h3>Média Água</h3><p id="stat-avg-water">0L</p></div>
             <div class="card-stat"><h3>Consistência Treino</h3><p id="stat-treino">0%</p></div>
+            <div class="card-stat card-run"><h3>Distância Total (Mês)</h3><p id="stat-total-dist">0 km</p></div>
         </div>
 
         <canvas id="chartMonth" style="max-height: 350px; margin-bottom: 30px;"></canvas>
+
+        <button class="btn-pdf" onclick="exportElitePDF()">📥 Baixar Relatório Executivo (PDF)</button>
 
         <table>
             <thead>
@@ -71,6 +90,7 @@
                     <th>Meta Água</th>
                     <th>Prot. (g)</th>
                     <th>Água (ml)</th>
+                    <th>Dist. (km)</th>
                     <th>Treino</th>
                     <th>Status</th>
                 </tr>
@@ -80,9 +100,41 @@
     </div>
 </div>
 
+<!-- TEMPLATE DO PDF (OCULTO NA INTERFACE) -->
+<div id="pdf-container">
+    <div id="pdf-template">
+        <div class="pdf-header">
+            <div>
+                <h1 style="margin:0; color:#00aa88; font-size: 1.2rem;">RELATÓRIO DE PERFORMANCE ELITE</h1>
+                <p style="margin:0; color:#555; font-size: 0.8rem;">Protocolo Nutricional: 2.100 Kcal / Dia</p>
+            </div>
+            <div style="text-align:right">
+                <p id="pdf-date-now" style="margin:0; font-size: 0.8rem;"></p>
+            </div>
+        </div>
+
+        <div class="pdf-grid">
+            <div class="pdf-box"><b>Peso Inicial</b><p id="pdf-p-ini" style="font-size:1.2rem; margin:5px 0;">--</p></div>
+            <div class="pdf-box"><b>Peso Atual</b><p id="pdf-p-fim" style="font-size:1.2rem; margin:5px 0;">--</p></div>
+            <div class="pdf-box" style="background:#d4edda"><b>Perda Total</b><p id="pdf-p-diff" style="font-size:1.2rem; margin:5px 0; color:#2ecc71">--</p></div>
+            <div class="pdf-box"><b>Média Prot.</b><p id="pdf-m-prot" style="font-size:1rem; margin:5px 0;">--</p></div>
+            <div class="pdf-box"><b>Cardio Total</b><p id="pdf-t-cardio" style="font-size:1rem; margin:5px 0;">--</p></div>
+            <div class="pdf-box"><b>Consistência</b><p id="pdf-t-consis" style="font-size:1rem; margin:5px 0;">--</p></div>
+        </div>
+
+        <h3 style="border-bottom: 2px solid #eee; padding-bottom: 5px; font-size: 1rem;">📅 Histórico Mensal</h3>
+        <div id="pdf-table-copy"></div>
+
+        <div class="pdf-footer">
+            <h3 style="margin-top:0; font-size: 1rem;">🏆 Veredito do Treinador e Plano Próximo Mês</h3>
+            <div id="pdf-veredito" style="line-height:1.4; color:#333; font-size: 0.8rem;"></div>
+        </div>
+    </div>
+</div>
+
 <script>
 const META_PROTEINA = 200;
-const ML_POR_KG = 35; // 35ml por kg de peso
+const ML_POR_KG = 35; 
 const treinos=["Descanso","Peito + Tríceps","Costas + Bíceps","Pernas","Ombro + Abdômen","Full Body","Pernas leve"];
 const dietaPadrao=[
     {n:"Café", p:30, a:["4 ovos","40g aveia","1 banana"]},
@@ -100,7 +152,6 @@ function getProt(saved){
     return t;
 }
 
-// Busca o peso mais recente para calcular meta se o dia atual estiver vazio
 function getUltimoPesoValido() {
     let now = new Date();
     for (let i = 0; i <= 31; i++) {
@@ -108,7 +159,7 @@ function getUltimoPesoValido() {
         let s = JSON.parse(localStorage.getItem(key(d))) || {};
         if (s.peso) return parseFloat(s.peso);
     }
-    return 80; // Padrão caso nunca tenha preenchido
+    return 80; 
 }
 
 function loadCal(){
@@ -152,7 +203,8 @@ function openDay(date){
         </div>`;
     });
 
-    html+=`<h3>⚖️ Peso Atual: <input type="number" step="0.1" style="width:80px" value="${s.peso||""}" onchange="save('${k}','peso',this.value)"> kg</h3>`;
+    html+=`<h3>⚖️ Peso Atual: <input type="number" step="0.1" class="input-inline" style="width:80px" value="${s.peso||""}" onchange="save('${k}','peso',this.value)"> kg</h3>`;
+    html+=`<h3>🏃 Cardio: <input type="number" step="0.1" class="input-inline" style="width:80px" value="${s.distancia||""}" placeholder="0.0" onchange="save('${k}','distancia',this.value)"> km</h3>`;
     html+=`<h3>💧 Água: ${s.water||0}ml / <span class="meta-tag">Meta: ${metaDinamica}ml</span></h3>
            <button onclick="addW('${k}',500)">+500ml</button>
            <button onclick="addW('${k}',-500)">-500ml</button>`;
@@ -182,8 +234,8 @@ function renderReport(){
     let totalDays=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
     let table=document.getElementById("table-body"); table.innerHTML="";
     
-    let labels=[], pesos=[], protn=[], waters=[], metasAgua=[], diasComPeso=[], valoresPeso=[], treinosOk=0;
-    let sumProt=0, sumWater=0;
+    let labels=[], pesos=[], protn=[], waters=[], metasAgua=[], distancias=[], diasComPeso=[], valoresPeso=[], treinosOk=0;
+    let sumProt=0, sumWater=0, totalDist=0;
 
     for(let d=1; d<=totalDays; d++){
         let date=new Date(now.getFullYear(),now.getMonth(),d);
@@ -191,13 +243,14 @@ function renderReport(){
         let p=s.peso?parseFloat(s.peso):null;
         let prot=getProt(s);
         let water=s.water||0;
+        let dist=s.distancia?parseFloat(s.distancia):0;
         let metaDinamica = (p || getUltimoPesoValido()) * ML_POR_KG;
 
         if(p){ diasComPeso.push(d); valoresPeso.push(p); }
         if(s.treino) treinosOk++;
-        sumProt+=prot; sumWater+=water;
+        sumProt+=prot; sumWater+=water; totalDist+=dist;
         
-        labels.push(d); pesos.push(p); protn.push(prot); waters.push(water); metasAgua.push(metaDinamica);
+        labels.push(d); pesos.push(p); protn.push(prot); waters.push(water); metasAgua.push(metaDinamica); distancias.push(dist);
 
         let resClass = (prot >= META_PROTEINA && water >= metaDinamica) ? "status-ok" : "status-warn";
         let resText = (prot >= META_PROTEINA && water >= metaDinamica) ? "BATIDA" : (prot>0?"PENDENTE":"OFF");
@@ -208,14 +261,22 @@ function renderReport(){
             <td>${Math.round(metaDinamica)}ml</td>
             <td>${prot}g</td>
             <td>${water}ml</td>
+            <td>${dist > 0 ? dist.toFixed(1) + ' km' : '-'}</td>
             <td>${s.treino?"✅":"❌"}</td>
             <td class="${resClass}">${resText}</td>
         </tr>`;
     }
 
+    // Perda de peso Real (Primeiro vs Último do mês)
+    let pIni = valoresPeso.length > 0 ? valoresPeso[0] : 0;
+    let pFim = valoresPeso.length > 0 ? valoresPeso[valoresPeso.length - 1] : 0;
+    let perdaReal = pIni > 0 ? (pIni - pFim).toFixed(1) : "0.0";
+    document.getElementById("stat-perda-real").innerText = perdaReal + " kg";
+
     document.getElementById("stat-treino").innerText = Math.round((treinosOk / todayNum) * 100) + "%";
     document.getElementById("stat-avg-prot").innerText = Math.round(sumProt/todayNum) + "g";
     document.getElementById("stat-avg-water").innerText = (sumWater/todayNum/1000).toFixed(1) + "L";
+    document.getElementById("stat-total-dist").innerText = totalDist.toFixed(1) + " km";
 
     if(diasComPeso.length > 1){
         let n=diasComPeso.length, sx=0, sy=0, sxy=0, sxx=0;
@@ -236,6 +297,7 @@ function renderReport(){
             datasets:[
                 { label:'Peso (kg)', data:pesos, borderColor:'cyan', yAxisID:'y' },
                 { label:'Proteína (g)', data:protn, borderColor: '#2ecc71', yAxisID:'y1' },
+                { label:'Cardio (km)', data:distancias, borderColor: '#f1c40f', backgroundColor: 'rgba(241, 196, 15, 0.1)', yAxisID:'y3', fill: true },
                 { label:'Água Real (ml)', data:waters, borderColor: '#3498db', yAxisID:'y2' },
                 { label:'Meta Água (ml)', data:metasAgua, borderColor: 'rgba(52, 152, 219, 0.3)', borderDash: [2,2], pointRadius: 0, yAxisID:'y2' }
             ]
@@ -244,11 +306,76 @@ function renderReport(){
             scales: { 
                 y: { type:'linear', position:'left', title:{display:true, text:'Peso'} },
                 y1: { type:'linear', position:'right', title:{display:true, text:'Prot'}, grid:{drawOnChartArea:false} },
-                y2: { type:'linear', position:'right', title:{display:true, text:'Água'}, grid:{drawOnChartArea:false} }
+                y2: { type:'linear', position:'right', title:{display:true, text:'Água'}, grid:{drawOnChartArea:false} },
+                y3: { type:'linear', position:'right', title:{display:true, text:'Cardio (km)'}, grid:{drawOnChartArea:false}, min: 0 }
             }
         }
     });
 }
+
+function exportElitePDF() {
+    renderReport();
+    const now = new Date();
+    document.getElementById("pdf-date-now").innerText = now.toLocaleString('pt-BR');
+    
+    let vPeso = [];
+    let tDist = 0;
+    let trOk = 0;
+    let sumP = 0;
+    let countD = now.getDate();
+
+    for(let d=1; d<=31; d++){
+        let dt = new Date(now.getFullYear(), now.getMonth(), d);
+        let s = JSON.parse(localStorage.getItem(key(dt))) || {};
+        if(s.peso) vPeso.push(parseFloat(s.peso));
+        if(s.distancia) tDist += parseFloat(s.distancia);
+        if(s.treino) trOk++;
+        sumP += getProt(s);
+    }
+
+    const pI = vPeso[0] || 0;
+    const pF = vPeso[vPeso.length-1] || 0;
+    const perda = pI > 0 ? (pI - pF).toFixed(1) : "0.0";
+    const consis = Math.round((trOk / countD) * 100) + "%";
+
+    document.getElementById("pdf-p-ini").innerText = pI + " kg";
+    document.getElementById("pdf-p-fim").innerText = pF + " kg";
+    document.getElementById("pdf-p-diff").innerText = "-" + perda + " kg";
+    document.getElementById("pdf-m-prot").innerText = Math.round(sumP/countD) + "g";
+    document.getElementById("pdf-t-cardio").innerText = tDist.toFixed(1) + " km";
+    document.getElementById("pdf-t-consis").innerText = consis;
+
+    // Clonar a tabela para o PDF sem estilos complexos do app
+    let tableHtml = "<table><thead>" + document.querySelector("#report table thead").innerHTML + "</thead>";
+    tableHtml += "<tbody>" + document.querySelector("#report table tbody").innerHTML + "</tbody></table>";
+    document.getElementById("pdf-table-copy").innerHTML = tableHtml;
+
+    // Veredito Inteligente
+    let veredito = "";
+    if(pI - pF > 2) veredito += "<p>✅ <b>RESULTADO EXCELENTE:</b> Sua perda de peso está em ritmo de elite. O déficit calórico planejado está funcionando perfeitamente.</p>";
+    else veredito += "<p>⚠️ <b>ALERTA DE PLATÔ:</b> A perda de peso foi tímida. Verifique se não há furos na dieta ou aumente o cardio diário em 2km.</p>";
+    
+    if(Math.round(sumP/countD) < 185) veredito += "<p>🥩 <b>RISCO DE MASSA MAGRA:</b> Sua proteína média está abaixo do ideal. Foque em bater os 200g para não perder músculo.</p>";
+    else veredito += "<p>💪 <b>ESTRUTURA MUSCULAR:</b> Ingestão de proteína excelente. Massa magra preservada.</p>";
+    
+    document.getElementById("pdf-veredito").innerHTML = veredito;
+
+    const element = document.getElementById("pdf-template");
+    element.style.display = 'block'; // Mostrar temporariamente para captura
+
+    const opt = {
+        margin: 10,
+        filename: `Cutting_Report_Elite_${now.getMonth()+1}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    html2pdf().set(opt).from(element).save().then(() => {
+        element.style.display = 'none'; // Ocultar novamente
+    });
+}
+
 loadCal();
 </script>
 </body>
