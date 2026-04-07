@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Cutting Tracker PRO - Meta Dinâmica</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --primary: #00aa88; --bg: #111; --card: #222; --accent: cyan; --water: #3498db; --prot: #2ecc71; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: white; margin: 0; padding: 15px; }
+        .container { max-width: 1100px; margin: auto; }
+        h1 { text-align: center; color: var(--primary); font-size: 1.5rem; text-transform: uppercase; }
+        
+        nav { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; }
+        button { padding: 10px 18px; background: var(--card); border: 1px solid var(--primary); color: white; border-radius: 5px; cursor: pointer; transition: 0.3s; }
+        button:hover { background: var(--primary); }
+
+        .calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 20px; }
+        .day { background: var(--card); padding: 12px; text-align: center; cursor: pointer; border-radius: 5px; border: 1px solid #333; position: relative; }
+        .today { border: 2px solid var(--accent); box-shadow: 0 0 8px var(--accent); }
+        .good { border-bottom: 4px solid var(--prot); }
+        .mid { border-bottom: 4px solid orange; }
+        
+        .panel { background: var(--card); padding: 20px; border-radius: 10px; border: 1px solid #444; }
+        .diet-box { background: #1a1a1a; padding: 12px; border-radius: 6px; margin: 8px 0; border-left: 3px solid var(--primary); }
+        .meta-tag { font-size: 0.75rem; color: var(--water); font-weight: bold; }
+
+        /* Relatório */
+        .stats-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .card-stat { background: #1a1a1a; padding: 15px; border-radius: 8px; text-align: center; border-bottom: 3px solid var(--primary); }
+        .card-stat h3 { margin: 0; font-size: 0.75rem; color: #aaa; }
+        .card-stat p { margin: 8px 0 0; font-size: 1.3rem; font-weight: bold; color: var(--accent); }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #1a1a1a; font-size: 0.85rem; }
+        th, td { padding: 12px; border: 1px solid #333; text-align: center; }
+        th { background: #222; color: var(--primary); }
+        .status-ok { color: var(--prot); font-weight: bold; }
+        .status-warn { color: orange; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🔥 Cutting Tracker PRO</h1>
+
+    <nav>
+        <button onclick="showPage('main')">📅 Agenda</button>
+        <button onclick="showPage('report')">📊 Relatório Consolidado</button>
+    </nav>
+
+    <div id="main">
+        <div class="calendar" id="calendar"></div>
+        <div id="panel" class="panel">Selecione um dia para gerenciar sua evolução.</div>
+    </div>
+
+    <div id="report" class="hidden">
+        <div class="stats-cards">
+            <div class="card-stat"><h3>Peso Previsto (Dia 30)</h3><p id="stat-peso-30">--</p></div>
+            <div class="card-stat"><h3>Média Proteína</h3><p id="stat-avg-prot">0g</p></div>
+            <div class="card-stat"><h3>Média Água</h3><p id="stat-avg-water">0L</p></div>
+            <div class="card-stat"><h3>Consistência Treino</h3><p id="stat-treino">0%</p></div>
+        </div>
+
+        <canvas id="chartMonth" style="max-height: 350px; margin-bottom: 30px;"></canvas>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Dia</th>
+                    <th>Peso (kg)</th>
+                    <th>Meta Água</th>
+                    <th>Prot. (g)</th>
+                    <th>Água (ml)</th>
+                    <th>Treino</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="table-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+const META_PROTEINA = 200;
+const ML_POR_KG = 35; // 35ml por kg de peso
+const treinos=["Descanso","Peito + Tríceps","Costas + Bíceps","Pernas","Ombro + Abdômen","Full Body","Pernas leve"];
+const dietaPadrao=[
+    {n:"Café", p:30, a:["4 ovos","40g aveia","1 banana"]},
+    {n:"Almoço", p:50, a:["200g frango/patinho","100g arroz","salada"]},
+    {n:"Pré Treino", p:25, a:["150g frango","100g batata"]},
+    {n:"Pós Treino", p:25, a:["1 scoop whey","1 banana"]},
+    {n:"Jantar", p:50, a:["200g peixe/frango","salada"]}
+];
+
+function key(date){ return "day-"+date.toISOString().split("T")[0]; }
+
+function getProt(saved){
+    let t=0;
+    dietaPadrao.forEach(r=>{ if(saved[r.n]=="feito") t+=r.p; });
+    return t;
+}
+
+// Busca o peso mais recente para calcular meta se o dia atual estiver vazio
+function getUltimoPesoValido() {
+    let now = new Date();
+    for (let i = 0; i <= 31; i++) {
+        let d = new Date(); d.setDate(now.getDate() - i);
+        let s = JSON.parse(localStorage.getItem(key(d))) || {};
+        if (s.peso) return parseFloat(s.peso);
+    }
+    return 80; // Padrão caso nunca tenha preenchido
+}
+
+function loadCal(){
+    const cal=document.getElementById("calendar"); cal.innerHTML="";
+    const now=new Date();
+    const days=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+
+    for(let d=1;d<=days;d++){
+        let date=new Date(now.getFullYear(),now.getMonth(),d);
+        let div=document.createElement("div"); div.className="day"; div.innerText=d;
+        if(date.toDateString()==now.toDateString()) div.classList.add("today");
+
+        let s=JSON.parse(localStorage.getItem(key(date)))||{};
+        let p=getProt(s);
+        let metaAguaDia = (s.peso || getUltimoPesoValido()) * ML_POR_KG;
+        
+        if(p>=META_PROTEINA && (s.water||0)>=metaAguaDia) div.classList.add("good");
+        else if(p>0 || (s.water||0)>0) div.classList.add("mid");
+        
+        div.onclick=()=>openDay(date);
+        cal.appendChild(div);
+    }
+}
+
+function openDay(date){
+    let k=key(date);
+    let s=JSON.parse(localStorage.getItem(k))||{};
+    let tDia=treinos[date.getDay()];
+    let pesoAtual = s.peso ? parseFloat(s.peso) : getUltimoPesoValido();
+    let metaDinamica = Math.round(pesoAtual * ML_POR_KG);
+    
+    let html=`<h2>${date.toLocaleDateString('pt-BR')} - ${tDia}</h2>`;
+    html+=`<label><input type="checkbox" ${s.treino?"checked":""} onchange="save('${k}','treino',this.checked)"> <strong>TREINO REALIZADO</strong></label><hr>`;
+
+    dietaPadrao.forEach(r=>{
+        let st=s[r.n]||"";
+        html+=`<div class="diet-box">
+            <strong>${r.n} (${r.p}g)</strong><br><small>${r.a.join(", ")}</small><br>
+            <input type="radio" name="${r.n}" ${st=="feito"?"checked":""} onclick="save('${k}','${r.n}','feito')"> Feito
+            <input type="radio" name="${r.n}" ${st=="nao"?"checked":""} onclick="save('${k}','${r.n}','nao')"> Off
+        </div>`;
+    });
+
+    html+=`<h3>⚖️ Peso Atual: <input type="number" step="0.1" style="width:80px" value="${s.peso||""}" onchange="save('${k}','peso',this.value)"> kg</h3>`;
+    html+=`<h3>💧 Água: ${s.water||0}ml / <span class="meta-tag">Meta: ${metaDinamica}ml</span></h3>
+           <button onclick="addW('${k}',500)">+500ml</button>
+           <button onclick="addW('${k}',-500)">-500ml</button>`;
+
+    document.getElementById("panel").innerHTML=html;
+}
+
+function save(k,n,v){
+    let s=JSON.parse(localStorage.getItem(k))||{}; s[n]=v;
+    localStorage.setItem(k,JSON.stringify(s)); loadCal(); openDay(new Date(k.replace("day-","")));
+}
+
+function addW(k,v){
+    let s=JSON.parse(localStorage.getItem(k))||{}; s.water=Math.max(0,(s.water||0)+v);
+    localStorage.setItem(k,JSON.stringify(s)); loadCal(); openDay(new Date(k.replace("day-","")));
+}
+
+function showPage(p){
+    document.getElementById("main").classList.toggle("hidden", p!=='main');
+    document.getElementById("report").classList.toggle("hidden", p!=='report');
+    if(p==='report') renderReport();
+}
+
+function renderReport(){
+    let now=new Date();
+    let todayNum = now.getDate();
+    let totalDays=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+    let table=document.getElementById("table-body"); table.innerHTML="";
+    
+    let labels=[], pesos=[], protn=[], waters=[], metasAgua=[], diasComPeso=[], valoresPeso=[], treinosOk=0;
+    let sumProt=0, sumWater=0;
+
+    for(let d=1; d<=totalDays; d++){
+        let date=new Date(now.getFullYear(),now.getMonth(),d);
+        let s=JSON.parse(localStorage.getItem(key(date)))||{};
+        let p=s.peso?parseFloat(s.peso):null;
+        let prot=getProt(s);
+        let water=s.water||0;
+        let metaDinamica = (p || getUltimoPesoValido()) * ML_POR_KG;
+
+        if(p){ diasComPeso.push(d); valoresPeso.push(p); }
+        if(s.treino) treinosOk++;
+        sumProt+=prot; sumWater+=water;
+        
+        labels.push(d); pesos.push(p); protn.push(prot); waters.push(water); metasAgua.push(metaDinamica);
+
+        let resClass = (prot >= META_PROTEINA && water >= metaDinamica) ? "status-ok" : "status-warn";
+        let resText = (prot >= META_PROTEINA && water >= metaDinamica) ? "BATIDA" : (prot>0?"PENDENTE":"OFF");
+
+        table.innerHTML+=`<tr>
+            <td>${d}</td>
+            <td>${p||"-"}</td>
+            <td>${Math.round(metaDinamica)}ml</td>
+            <td>${prot}g</td>
+            <td>${water}ml</td>
+            <td>${s.treino?"✅":"❌"}</td>
+            <td class="${resClass}">${resText}</td>
+        </tr>`;
+    }
+
+    document.getElementById("stat-treino").innerText = Math.round((treinosOk / todayNum) * 100) + "%";
+    document.getElementById("stat-avg-prot").innerText = Math.round(sumProt/todayNum) + "g";
+    document.getElementById("stat-avg-water").innerText = (sumWater/todayNum/1000).toFixed(1) + "L";
+
+    if(diasComPeso.length > 1){
+        let n=diasComPeso.length, sx=0, sy=0, sxy=0, sxx=0;
+        for(let i=0;i<n;i++){
+            sx+=diasComPeso[i]; sy+=valoresPeso[i];
+            sxy+=diasComPeso[i]*valoresPeso[i]; sxx+=diasComPeso[i]*diasComPeso[i];
+        }
+        let m=(n*sxy - sx*sy)/(n*sxx - sx*sx);
+        let b=(sy - m*sx)/n;
+        document.getElementById("stat-peso-30").innerText = (m*30+b).toFixed(2) + " kg";
+    }
+
+    if(window.myChart) window.myChart.destroy();
+    window.myChart = new Chart(document.getElementById("chartMonth"), {
+        type:'line',
+        data:{
+            labels:labels,
+            datasets:[
+                { label:'Peso (kg)', data:pesos, borderColor:'cyan', yAxisID:'y' },
+                { label:'Proteína (g)', data:protn, borderColor: '#2ecc71', yAxisID:'y1' },
+                { label:'Água Real (ml)', data:waters, borderColor: '#3498db', yAxisID:'y2' },
+                { label:'Meta Água (ml)', data:metasAgua, borderColor: 'rgba(52, 152, 219, 0.3)', borderDash: [2,2], pointRadius: 0, yAxisID:'y2' }
+            ]
+        },
+        options: {
+            scales: { 
+                y: { type:'linear', position:'left', title:{display:true, text:'Peso'} },
+                y1: { type:'linear', position:'right', title:{display:true, text:'Prot'}, grid:{drawOnChartArea:false} },
+                y2: { type:'linear', position:'right', title:{display:true, text:'Água'}, grid:{drawOnChartArea:false} }
+            }
+        }
+    });
+}
+loadCal();
+</script>
+</body>
+</html>
