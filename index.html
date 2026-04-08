@@ -91,6 +91,7 @@
                     <th>Prot. (g)</th>
                     <th>Água (ml)</th>
                     <th>Dist. (km)</th>
+                    <th>Pace (min/km)</th>
                     <th>Treino</th>
                     <th>Status</th>
                 </tr>
@@ -204,10 +205,13 @@ function openDay(date){
     });
 
     html+=`<h3>⚖️ Peso Atual: <input type="number" step="0.1" class="input-inline" style="width:80px" value="${s.peso||""}" onchange="save('${k}','peso',this.value)"> kg</h3>`;
-    html+=`<h3>🏃 Cardio: <input type="number" step="0.1" class="input-inline" style="width:80px" value="${s.distancia||""}" placeholder="0.0" onchange="save('${k}','distancia',this.value)"> km</h3>`;
+    html+=`<h3>🏃 Cardio: 
+            <input type="number" step="0.1" class="input-inline" style="width:80px" value="${s.distancia||""}" placeholder="km" onchange="save('${k}','distancia',this.value)"> km em 
+            <input type="number" step="1" class="input-inline" style="width:70px" value="${s.tempo||""}" placeholder="min" onchange="save('${k}','tempo',this.value)"> min
+          </h3>`;
     html+=`<h3>💧 Água: ${s.water||0}ml / <span class="meta-tag">Meta: ${metaDinamica}ml</span></h3>
-           <button onclick="addW('${k}',500)">+500ml</button>
-           <button onclick="addW('${k}',-500)">-500ml</button>`;
+            <button onclick="addW('${k}',500)">+500ml</button>
+            <button onclick="addW('${k}',-500)">-500ml</button>`;
 
     document.getElementById("panel").innerHTML=html;
 }
@@ -228,6 +232,15 @@ function showPage(p){
     if(p==='report') renderReport();
 }
 
+// Função auxiliar para calcular Pace
+function calcularPace(dist, tempo) {
+    if (!dist || !tempo || dist <= 0) return "-";
+    let paceTotal = tempo / dist;
+    let min = Math.floor(paceTotal);
+    let seg = Math.round((paceTotal - min) * 60);
+    return `${min}:${seg.toString().padStart(2, '0')}`;
+}
+
 function renderReport(){
     let now=new Date();
     let todayNum = now.getDate();
@@ -244,6 +257,8 @@ function renderReport(){
         let prot=getProt(s);
         let water=s.water||0;
         let dist=s.distancia?parseFloat(s.distancia):0;
+        let tempo=s.tempo?parseFloat(s.tempo):0;
+        let pace = calcularPace(dist, tempo);
         let metaDinamica = (p || getUltimoPesoValido()) * ML_POR_KG;
 
         if(p){ diasComPeso.push(d); valoresPeso.push(p); }
@@ -262,6 +277,7 @@ function renderReport(){
             <td>${prot}g</td>
             <td>${water}ml</td>
             <td>${dist > 0 ? dist.toFixed(1) + ' km' : '-'}</td>
+            <td>${pace}</td>
             <td>${s.treino?"✅":"❌"}</td>
             <td class="${resClass}">${resText}</td>
         </tr>`;
