@@ -6,7 +6,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
-        :root { --primary: #00aa88; --bg: #111; --card: #222; --accent: cyan; --water: #3498db; --prot: #2ecc71; --run: #f1c40f; }
+        :root { --primary: #00aa88; --bg: #111; --card: #222; --accent: cyan; --water: #3498db; --prot: #2ecc71; --run: #f1c40f; --pace: #9b59b6; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: white; margin: 0; padding: 15px; }
         .container { max-width: 1100px; margin: auto; }
         h1 { text-align: center; color: var(--primary); font-size: 1.5rem; text-transform: uppercase; }
@@ -25,6 +25,14 @@
         .diet-box { background: #1a1a1a; padding: 12px; border-radius: 6px; margin: 8px 0; border-left: 3px solid var(--primary); }
         .meta-tag { font-size: 0.75rem; color: var(--water); font-weight: bold; }
 
+        /* Estilos Refeição Manual */
+        .manual-refeicao { background: #2a2a2a; padding: 15px; border-radius: 8px; margin-top: 20px; border: 1px solid var(--accent); }
+        .search-results { background: #333; max-height: 150px; overflow-y: auto; border-radius: 4px; margin-top: 5px; }
+        .search-item { padding: 8px; cursor: pointer; border-bottom: 1px solid #444; display: flex; justify-content: space-between; }
+        .search-item:hover { background: var(--primary); }
+        .item-list { width: 100%; margin-top: 10px; border-collapse: collapse; }
+        .total-kcal-box { font-size: 1.2rem; color: var(--prot); font-weight: bold; margin-bottom: 10px; text-align: center; background: #000; padding: 10px; border-radius: 5px; }
+
         /* Relatório */
         .stats-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
         .card-stat { background: #1a1a1a; padding: 15px; border-radius: 8px; text-align: center; border-bottom: 3px solid var(--primary); }
@@ -42,7 +50,7 @@
         .input-inline { background: #333; border: 1px solid #555; color: white; padding: 5px; border-radius: 4px; }
         .btn-pdf { background: #e74c3c; border: none; width: 100%; margin-top: 15px; font-weight: bold; text-transform: uppercase; }
 
-        /* Estilos específicos para o PDF */
+        /* PDF Styles */
         #pdf-template { padding: 30px; color: #000; background: #fff; font-family: sans-serif; display: none; }
         .pdf-header { border-bottom: 4px solid #00aa88; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
         .pdf-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px; }
@@ -78,7 +86,7 @@
             <div class="card-stat card-run"><h3>Distância Total (Mês)</h3><p id="stat-total-dist">0 km</p></div>
         </div>
 
-        <canvas id="chartMonth" style="max-height: 350px; margin-bottom: 30px;"></canvas>
+        <canvas id="chartMonth" style="max-height: 400px; margin-bottom: 30px;"></canvas>
 
         <button class="btn-pdf" onclick="exportElitePDF()">📥 Baixar Relatório Executivo (PDF)</button>
 
@@ -101,13 +109,12 @@
     </div>
 </div>
 
-<!-- TEMPLATE DO PDF (OCULTO NA INTERFACE) -->
 <div id="pdf-container">
     <div id="pdf-template">
         <div class="pdf-header">
             <div>
                 <h1 style="margin:0; color:#00aa88; font-size: 1.2rem;">RELATÓRIO DE PERFORMANCE ELITE</h1>
-                <p style="margin:0; color:#555; font-size: 0.8rem;">Protocolo Nutricional: 2.100 Kcal / Dia</p>
+                <p style="margin:0; color:#555; font-size: 0.8rem;">Protocolo Nutricional: 2.400 Kcal / Dia</p>
             </div>
             <div style="text-align:right">
                 <p id="pdf-date-now" style="margin:0; font-size: 0.8rem;"></p>
@@ -134,23 +141,71 @@
 </div>
 
 <script>
-const META_PROTEINA = 200;
+// METAS ATUALIZADAS
+const META_PROTEINA = 240;
+const META_CALORICA = 2400;
 const ML_POR_KG = 35; 
 const treinos=["Descanso","Peito + Tríceps","Costas + Bíceps","Pernas","Ombro + Abdômen","Full Body","Pernas leve"];
+const listaRefeicoes = ["Café da Manhã", "Almoço", "Lanche da Tarde", "Pré-Treino", "Pós-Treino", "Jantar", "Ceia"];
+
+// Tabela de Dieta Padrao com estimativa de Kcal
 const dietaPadrao=[
-    {n:"Café", p:30, a:["4 ovos","40g aveia","1 banana"]},
-    {n:"Almoço", p:50, a:["200g frango/patinho","100g arroz","salada"]},
-    {n:"Pré Treino", p:25, a:["150g frango","100g batata"]},
-    {n:"Pós Treino", p:25, a:["1 scoop whey","1 banana"]},
-    {n:"Jantar", p:50, a:["200g peixe/frango","salada"]}
+    {n:"Café", p:30, k:450, a:["4 ovos","40g aveia","1 banana"]},
+    {n:"Almoço", p:50, k:650, a:["200g frango/patinho","100g arroz","salada"]},
+    {n:"Pré Treino", p:25, k:300, a:["150g frango","100g batata"]},
+    {n:"Pós Treino", p:25, k:250, a:["1 scoop whey","1 banana"]},
+    {n:"Jantar", p:50, k:650, a:["200g peixe/frango","salada"]}
+];
+
+// Tabela de alimentos expandida (Kcal e Prot por grama/unidade)
+const TABELA_ALIMENTOS = [
+    { nome: "Cuscuz Nordestino", kcal: 1.1, prot: 0.02 },
+    { nome: "Pão Carioca (Unidade)", kcal: 150, prot: 4.5 }, 
+    { nome: "Pão de Forma (Fatia)", kcal: 70, prot: 2.5 },
+    { nome: "Ovo Cozido (Unidade)", kcal: 78, prot: 6 },
+    { nome: "Ovo Frito (Unidade)", kcal: 120, prot: 6 },
+    { nome: "Patinho Moído (Cozido)", kcal: 2.2, prot: 0.28 },
+    { nome: "Frango Grelhado", kcal: 1.65, prot: 0.31 },
+    { nome: "Tilápia / Peixe Branco", kcal: 1.1, prot: 0.26 },
+    { nome: "Arroz Branco", kcal: 1.3, prot: 0.02 },
+    { nome: "Feijão Corda", kcal: 0.9, prot: 0.05 },
+    { nome: "Carne de Sol", kcal: 2.5, prot: 0.25 },
+    { nome: "Whey Protein (Scoop 30g)", kcal: 115, prot: 24 },
+    { nome: "Pasta de Amendoim (15g)", kcal: 90, prot: 4 },
+    { nome: "Tapioca (Goma)", kcal: 2.4, prot: 0.01 },
+    { nome: "Pitaia", kcal: 0.5, prot: 0.01 },
+    { nome: "Kiwi", kcal: 0.6, prot: 0.01 },
+    { nome: "Mamão", kcal: 0.4, prot: 0.01 },
+    { nome: "Melão", kcal: 0.3, prot: 0.01 },
+    { nome: "Manga", kcal: 0.6, prot: 0.01 },
+    { nome: "Banana", kcal: 0.9, prot: 0.01 },
+    { nome: "Batata Doce", kcal: 0.86, prot: 0.01 },
+    { nome: "Queijo Coalho (Fatia 30g)", kcal: 90, prot: 7 },
+    { nome: "Suco de Laranja (200ml)", kcal: 90, prot: 1 }
 ];
 
 function key(date){ return "day-"+date.toISOString().split("T")[0]; }
 
+// Função unificada para Proteína
 function getProt(saved){
     let t=0;
     dietaPadrao.forEach(r=>{ if(saved[r.n]=="feito") t+=r.p; });
-    return t;
+    if(saved.itensManuais) {
+        saved.itensManuais.forEach(i => t += (i.prot * i.qtd));
+    }
+    return Math.round(t);
+}
+
+// Função unificada para Calorias (Padrão + Manual)
+function getKcalTotal(saved) {
+    let total = 0;
+    // Soma as kcal da dieta padrão se estiverem marcadas como 'feito'
+    dietaPadrao.forEach(r => { if(saved[r.n]=="feito") total += r.k; });
+    // Soma as kcal dos itens manuais
+    if(saved.itensManuais) {
+        saved.itensManuais.forEach(i => total += (i.kcal * i.qtd));
+    }
+    return Math.round(total);
 }
 
 function getUltimoPesoValido() {
@@ -178,7 +233,7 @@ function loadCal(){
         let metaAguaDia = (s.peso || getUltimoPesoValido()) * ML_POR_KG;
         
         if(p>=META_PROTEINA && (s.water||0)>=metaAguaDia) div.classList.add("good");
-        else if(p>0 || (s.water||0)>0) div.classList.add("mid");
+        else if(p>0 || (s.water||0)>0 || (s.itensManuais && s.itensManuais.length > 0)) div.classList.add("mid");
         
         div.onclick=()=>openDay(date);
         cal.appendChild(div);
@@ -192,17 +247,50 @@ function openDay(date){
     let pesoAtual = s.peso ? parseFloat(s.peso) : getUltimoPesoValido();
     let metaDinamica = Math.round(pesoAtual * ML_POR_KG);
     
-    let html=`<h2>${date.toLocaleDateString('pt-BR')} - ${tDia}</h2>`;
+    // Cálculos de soma total (Padrao + Manual)
+    let totalKcal = getKcalTotal(s);
+    let totalProt = getProt(s);
+    
+    // Cabeçalho conforme solicitado
+    let html=`<div class="total-kcal-box">🔥 Calorias: ${totalKcal} / ${META_CALORICA} kcal | 🥩 Prot Total: ${totalProt}g / ${META_PROTEINA}g</div>`;
+    
+    html+=`<h2>${date.toLocaleDateString('pt-BR')} - ${tDia}</h2>`;
     html+=`<label><input type="checkbox" ${s.treino?"checked":""} onchange="save('${k}','treino',this.checked)"> <strong>TREINO REALIZADO</strong></label><hr>`;
 
     dietaPadrao.forEach(r=>{
         let st=s[r.n]||"";
         html+=`<div class="diet-box">
-            <strong>${r.n} (${r.p}g)</strong><br><small>${r.a.join(", ")}</small><br>
+            <strong>${r.n} (${r.p}g | ~${r.k}kcal)</strong><br><small>${r.a.join(", ")}</small><br>
             <input type="radio" name="${r.n}" ${st=="feito"?"checked":""} onclick="save('${k}','${r.n}','feito')"> Feito
             <input type="radio" name="${r.n}" ${st=="nao"?"checked":""} onclick="save('${k}','${r.n}','nao')"> Off
         </div>`;
     });
+
+    html += `<div class="manual-refeicao">
+                <h3>🍽️ Adicionar Itens de Dieta</h3>
+                <div style="display:flex; gap:5px; margin-bottom:5px;">
+                    <select id="selectRefeicao" class="input-inline" style="flex:1">
+                        ${listaRefeicoes.map(r => `<option value="${r}">${r}</option>`).join('')}
+                    </select>
+                    <input type="text" id="searchAlimento" placeholder="Buscar alimento..." onkeyup="filterAlimentos(this.value)" class="input-inline" style="flex:2">
+                </div>
+                <div id="results" class="search-results"></div>
+                <table class="item-list" id="listaItens">
+                    <thead><tr><th>Refeição</th><th>Alimento</th><th>Qtd</th><th>Prot</th><th>Kcal</th><th>x</th></tr></thead>
+                    <tbody>`;
+    if(s.itensManuais) {
+        s.itensManuais.forEach((item, index) => {
+            html += `<tr>
+                        <td style="font-size:0.7rem; color:var(--primary)">${item.refeicao || 'Extra'}</td>
+                        <td>${item.nome}</td>
+                        <td>${item.qtd}</td>
+                        <td>${Math.round(item.prot * item.qtd)}g</td>
+                        <td>${Math.round(item.kcal * item.qtd)}</td>
+                        <td><button onclick="removeItemManual('${k}', ${index})">❌</button></td>
+                     </tr>`;
+        });
+    }
+    html += `</tbody></table></div>`;
 
     html+=`<h3>⚖️ Peso Atual: <input type="number" step="0.1" class="input-inline" style="width:80px" value="${s.peso||""}" onchange="save('${k}','peso',this.value)"> kg</h3>`;
     html+=`<h3>🏃 Cardio: 
@@ -216,14 +304,70 @@ function openDay(date){
     document.getElementById("panel").innerHTML=html;
 }
 
+function filterAlimentos(query) {
+    let resDiv = document.getElementById("results");
+    resDiv.innerHTML = "";
+    if(!query) return;
+    
+    let filtrados = TABELA_ALIMENTOS.filter(i => i.nome.toLowerCase().includes(query.toLowerCase()));
+    filtrados.forEach(alimento => {
+        let d = document.createElement("div");
+        d.className = "search-item";
+        d.innerHTML = `<span>${alimento.nome}</span> <small style="color:var(--prot)">${alimento.prot}g prot/g</small>`;
+        d.onclick = () => {
+            let qtd = prompt("Digite a quantidade (gramas ou unidades):", "100");
+            if(qtd) addItemManual(alimento, qtd);
+        };
+        resDiv.appendChild(d);
+    });
+}
+
+function addItemManual(alimento, qtd) {
+    const dataH2 = document.querySelector("h2").innerText.split(" - ")[0];
+    const partes = dataH2.split("/");
+    const k = "day-" + partes[2] + "-" + partes[1] + "-" + partes[0];
+    
+    let s = JSON.parse(localStorage.getItem(k)) || {};
+    if(!s.itensManuais) s.itensManuais = [];
+    
+    const refeicaoSelecionada = document.getElementById("selectRefeicao").value;
+    
+    s.itensManuais.push({ 
+        refeicao: refeicaoSelecionada,
+        nome: alimento.nome, 
+        kcal: alimento.kcal, 
+        prot: alimento.prot,
+        qtd: parseFloat(qtd) 
+    });
+    
+    localStorage.setItem(k, JSON.stringify(s));
+    loadCal();
+    openDay(new Date(partes[2], partes[1]-1, partes[0]));
+}
+
+function removeItemManual(k, index) {
+    let s = JSON.parse(localStorage.getItem(k)) || {};
+    s.itensManuais.splice(index, 1);
+    localStorage.setItem(k, JSON.stringify(s));
+    loadCal();
+    const partes = k.replace("day-","").split("-");
+    openDay(new Date(partes[0], partes[1]-1, partes[2]));
+}
+
 function save(k,n,v){
     let s=JSON.parse(localStorage.getItem(k))||{}; s[n]=v;
-    localStorage.setItem(k,JSON.stringify(s)); loadCal(); openDay(new Date(k.replace("day-","")));
+    localStorage.setItem(k,JSON.stringify(s)); 
+    loadCal(); 
+    const partes = k.replace("day-","").split("-");
+    openDay(new Date(partes[0], partes[1]-1, partes[2]));
 }
 
 function addW(k,v){
     let s=JSON.parse(localStorage.getItem(k))||{}; s.water=Math.max(0,(s.water||0)+v);
-    localStorage.setItem(k,JSON.stringify(s)); loadCal(); openDay(new Date(k.replace("day-","")));
+    localStorage.setItem(k,JSON.stringify(s)); 
+    loadCal(); 
+    const partes = k.replace("day-","").split("-");
+    openDay(new Date(partes[0], partes[1]-1, partes[2]));
 }
 
 function showPage(p){
@@ -232,7 +376,6 @@ function showPage(p){
     if(p==='report') renderReport();
 }
 
-// Função auxiliar para calcular Pace
 function calcularPace(dist, tempo) {
     if (!dist || !tempo || dist <= 0) return "-";
     let paceTotal = tempo / dist;
@@ -247,7 +390,7 @@ function renderReport(){
     let totalDays=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
     let table=document.getElementById("table-body"); table.innerHTML="";
     
-    let labels=[], pesos=[], protn=[], waters=[], metasAgua=[], distancias=[], diasComPeso=[], valoresPeso=[], treinosOk=0;
+    let labels=[], pesos=[], protn=[], waters=[], metasAgua=[], distancias=[], pacesDecimais=[], diasComPeso=[], valoresPeso=[], treinosOk=0;
     let sumProt=0, sumWater=0, totalDist=0;
 
     for(let d=1; d<=totalDays; d++){
@@ -258,14 +401,17 @@ function renderReport(){
         let water=s.water||0;
         let dist=s.distancia?parseFloat(s.distancia):0;
         let tempo=s.tempo?parseFloat(s.tempo):0;
-        let pace = calcularPace(dist, tempo);
+        
+        let paceStr = calcularPace(dist, tempo);
+        let paceDec = (dist > 0 && tempo > 0) ? (tempo / dist) : null;
         let metaDinamica = (p || getUltimoPesoValido()) * ML_POR_KG;
 
         if(p){ diasComPeso.push(d); valoresPeso.push(p); }
         if(s.treino) treinosOk++;
         sumProt+=prot; sumWater+=water; totalDist+=dist;
         
-        labels.push(d); pesos.push(p); protn.push(prot); waters.push(water); metasAgua.push(metaDinamica); distancias.push(dist);
+        labels.push(d); pesos.push(p); protn.push(prot); waters.push(water); metasAgua.push(metaDinamica); 
+        distancias.push(dist || null); pacesDecimais.push(paceDec);
 
         let resClass = (prot >= META_PROTEINA && water >= metaDinamica) ? "status-ok" : "status-warn";
         let resText = (prot >= META_PROTEINA && water >= metaDinamica) ? "BATIDA" : (prot>0?"PENDENTE":"OFF");
@@ -277,18 +423,16 @@ function renderReport(){
             <td>${prot}g</td>
             <td>${water}ml</td>
             <td>${dist > 0 ? dist.toFixed(1) + ' km' : '-'}</td>
-            <td>${pace}</td>
+            <td>${paceStr}</td>
             <td>${s.treino?"✅":"❌"}</td>
             <td class="${resClass}">${resText}</td>
         </tr>`;
     }
 
-    // Perda de peso Real (Primeiro vs Último do mês)
     let pIni = valoresPeso.length > 0 ? valoresPeso[0] : 0;
     let pFim = valoresPeso.length > 0 ? valoresPeso[valoresPeso.length - 1] : 0;
     let perdaReal = pIni > 0 ? (pIni - pFim).toFixed(1) : "0.0";
     document.getElementById("stat-perda-real").innerText = perdaReal + " kg";
-
     document.getElementById("stat-treino").innerText = Math.round((treinosOk / todayNum) * 100) + "%";
     document.getElementById("stat-avg-prot").innerText = Math.round(sumProt/todayNum) + "g";
     document.getElementById("stat-avg-water").innerText = (sumWater/todayNum/1000).toFixed(1) + "L";
@@ -312,18 +456,21 @@ function renderReport(){
             labels:labels,
             datasets:[
                 { label:'Peso (kg)', data:pesos, borderColor:'cyan', yAxisID:'y' },
+                { label:'Pace (min/km)', data:pacesDecimais, borderColor:'#9b59b6', yAxisID:'y4', spanGaps: true, borderDash: [5, 5] },
                 { label:'Proteína (g)', data:protn, borderColor: '#2ecc71', yAxisID:'y1' },
-                { label:'Cardio (km)', data:distancias, borderColor: '#f1c40f', backgroundColor: 'rgba(241, 196, 15, 0.1)', yAxisID:'y3', fill: true },
+                { label:'Cardio (km)', data:distancias, borderColor: '#f1c40f', backgroundColor: 'rgba(241, 196, 15, 0.1)', yAxisID:'y3', fill: true, spanGaps: true },
                 { label:'Água Real (ml)', data:waters, borderColor: '#3498db', yAxisID:'y2' },
                 { label:'Meta Água (ml)', data:metasAgua, borderColor: 'rgba(52, 152, 219, 0.3)', borderDash: [2,2], pointRadius: 0, yAxisID:'y2' }
             ]
         },
         options: {
+            interaction: { mode: 'index', intersect: false },
             scales: { 
                 y: { type:'linear', position:'left', title:{display:true, text:'Peso'} },
                 y1: { type:'linear', position:'right', title:{display:true, text:'Prot'}, grid:{drawOnChartArea:false} },
                 y2: { type:'linear', position:'right', title:{display:true, text:'Água'}, grid:{drawOnChartArea:false} },
-                y3: { type:'linear', position:'right', title:{display:true, text:'Cardio (km)'}, grid:{drawOnChartArea:false}, min: 0 }
+                y3: { type:'linear', position:'right', title:{display:true, text:'Cardio'}, grid:{drawOnChartArea:false} },
+                y4: { type:'linear', position:'right', title:{display:true, text:'Pace'}, grid:{drawOnChartArea:false}, reverse: true }
             }
         }
     });
@@ -361,23 +508,20 @@ function exportElitePDF() {
     document.getElementById("pdf-t-cardio").innerText = tDist.toFixed(1) + " km";
     document.getElementById("pdf-t-consis").innerText = consis;
 
-    // Clonar a tabela para o PDF sem estilos complexos do app
     let tableHtml = "<table><thead>" + document.querySelector("#report table thead").innerHTML + "</thead>";
     tableHtml += "<tbody>" + document.querySelector("#report table tbody").innerHTML + "</tbody></table>";
     document.getElementById("pdf-table-copy").innerHTML = tableHtml;
 
-    // Veredito Inteligente
     let veredito = "";
-    if(pI - pF > 2) veredito += "<p>✅ <b>RESULTADO EXCELENTE:</b> Sua perda de peso está em ritmo de elite. O déficit calórico planejado está funcionando perfeitamente.</p>";
-    else veredito += "<p>⚠️ <b>ALERTA DE PLATÔ:</b> A perda de peso foi tímida. Verifique se não há furos na dieta ou aumente o cardio diário em 2km.</p>";
-    
-    if(Math.round(sumP/countD) < 185) veredito += "<p>🥩 <b>RISCO DE MASSA MAGRA:</b> Sua proteína média está abaixo do ideal. Foque em bater os 200g para não perder músculo.</p>";
-    else veredito += "<p>💪 <b>ESTRUTURA MUSCULAR:</b> Ingestão de proteína excelente. Massa magra preservada.</p>";
+    if(pI - pF > 2) veredito += "<p>✅ <b>RESULTADO EXCELENTE:</b> Sua perda de peso está em ritmo de elite.</p>";
+    else veredito += "<p>⚠️ <b>ALERTA DE PLATÔ:</b> A perda de peso foi tímida.</p>";
+    if(Math.round(sumP/countD) < (META_PROTEINA - 15)) veredito += "<p>🥩 <b>RISCO DE MASSA MAGRA:</b> Sua proteína média está abaixo do ideal.</p>";
+    else veredito += "<p>💪 <b>ESTRUTURA MUSCULAR:</b> Ingestão de proteína excelente.</p>";
     
     document.getElementById("pdf-veredito").innerHTML = veredito;
 
     const element = document.getElementById("pdf-template");
-    element.style.display = 'block'; // Mostrar temporariamente para captura
+    element.style.display = 'block';
 
     const opt = {
         margin: 10,
@@ -388,7 +532,7 @@ function exportElitePDF() {
     };
 
     html2pdf().set(opt).from(element).save().then(() => {
-        element.style.display = 'none'; // Ocultar novamente
+        element.style.display = 'none';
     });
 }
 
